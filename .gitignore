@@ -1,0 +1,12 @@
+*.pyc
+*.swp
+*.swo
+build/
+.directory/
+.idea/
+.venv/
+dist/
+README
+MANIFEST
+tornadorpc.egg-info/
+
