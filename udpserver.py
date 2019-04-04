@@ -3,14 +3,13 @@
 from __future__ import absolute_import, division, print_function, with_statement
 
 import errno
-import inspect
 import os
 import socket
 
 from tornado.ioloop import IOLoop
-from tornado import process
+from tornado import process, httputil
 from tornado.netutil import set_close_exec
-
+from tornado.httputil import HTTPServerRequest
 
 class UDPServer(object):
     def __init__(self, io_loop=None):
@@ -51,14 +50,18 @@ class UDPServer(object):
             self.io_loop.remove_handler(fd)
             sock.close()
 
+
     def _on_recive(self, data, address):
         print(data)
         host = address[0]
         port = address[1]
-        sock = socket.socket(
-            socket.AF_INET,
-            socket.SOCK_DGRAM)
-        sock.connect(address)
+        # sock = socket.socket(
+        #     socket.AF_INET,
+        #     socket.SOCK_DGRAM)
+        # sock.sendto(data, ("127.0.0.1", 1111))
+        # bufferSize = 1024
+        # msgFromServer = sock.recvfrom(bufferSize)
+        # msg = "Message from Server {}".format(msgFromServer[0])
 
 
 def bind_sockets(port, address=None, family=socket.AF_UNSPEC, backlog=25):
@@ -105,7 +108,57 @@ def add_accept_handler(sock, callback, io_loop=None):
     io_loop.add_handler(sock.fileno(), handle_accept, IOLoop.READ)
 
 
-# 
+class UDPRequestHandler(object):
+    SUPPORTED_METHODS = ("GET", "INIT", "POST", "DELETE", "PATCH", "PUT", "OPTIONS")
+
+    def __init__(
+            self,
+            application,
+            request: httputil.HTTPServerRequest,
+            **kwargs
+    ):
+        super(UDPRequestHandler, self).__init__()
+
+        self.application = application
+        self.request = request
+        self._headers_written = False
+        self._finished = False
+        self._auto_finish = True
+        self._prepared_future = None
+        assert self.request.connection is not None
+        self.request.connection.set_close_callback(  # type: ignore
+            self.on_connection_close
+        )
+        self.initialize(**kwargs)  # type: ignore
+
+    def _initialize(self) -> None:
+        pass
+
+    def get(self, *args) -> None:
+        to_url = self._url.format(*args)
+        if self.request.query_arguments:
+            # TODO: figure out typing for the next line.
+            to_url = httputil.url_concat(
+                to_url,
+                list(httputil.qs_to_qsl(self.request.query_arguments)),  # type: ignore
+            )
+        self.redirect(to_url, permanent=self._permanent)
+
+    def init(self):
+        pass
+
+
+
+# import socket
+server = UDPServer()
+server.bind(port=1111, address='10.1.4.6')
+server.start(1)
+IOLoop.instance().start()
+
+
+from tornado.web import RequestHandler, Application
+
+
 # if hasattr(socket, 'AF_UNIX'):
 #     def bind_unix_socket(file, mode=600, backlog=128):
 #         sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
