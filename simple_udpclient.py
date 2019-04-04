@@ -30,7 +30,12 @@ if typing.TYPE_CHECKING:
     from typing import Deque, Tuple, List  # noqa: F401
 
 
-from asynclient import AsyncUDPClient, UDPRequest, UDPResponse, UDPClientError
+from asynclient import (
+    AsyncUDPClient, 
+    UDPRequest, 
+    UDPResponse, 
+    UDPClientError,
+)
 
 
 class UDPTimeoutError(UDPClientError):

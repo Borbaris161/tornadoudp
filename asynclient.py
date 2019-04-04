@@ -2,6 +2,7 @@
 # encoding: utf-8
 
 import datetime
+import functools
 
 import ssl
 import time
@@ -17,6 +18,8 @@ from tornado.concurrent import Future, future_set_result_unless_cancelled, \
 
 from tornado.ioloop import IOLoop
 from tornado.util import unicode_type, Configurable
+
+from tornado.escape import utf8, native_str
 
 # curl_log = logging.getLogger("tornado.curl_udpclient")
 
@@ -52,15 +55,15 @@ class UDPClient(object):
 
         # Create the client while our IOLoop is "current", without
         # clobbering the thread's real current IOLoop (if any).
-        # async def make_client() -> "AsyncUDPClient":
-        #     await gen.sleep(0)
-        #     assert async_client_class is not None
-        #     return async_client_class(**kwargs)
-
-        def make_client() -> "AsyncUDPClient":
-            gen_sleep = gen.sleep(0)
+        async def make_client() -> "AsyncUDPClient":
+            await gen.sleep(0)
             assert async_client_class is not None
             return async_client_class(**kwargs)
+
+        # def make_client() -> "AsyncUDPClient":
+        #     gen_sleep = gen.sleep(0)
+        #     assert async_client_class is not None
+        #     return async_client_class(**kwargs)
 
 
         self._async_client = self._io_loop.run_sync(make_client)
@@ -80,10 +83,10 @@ class UDPClient(object):
         self, request: Union["UDPRequest", str], **kwargs: Any
     ) -> "UDPResponse":
         print(self._async_client)
-        # response = self._io_loop.run_sync(
-        #     functools.partial(self._async_client.fetch, request, **kwargs)
-        # )
-        # return response
+        response = self._io_loop.run_sync(
+            functools.partial(self._async_client.fetch, request, **kwargs)
+        )
+        return response
 
 # class UDPStream(IOStream):
 #     _destination = None
@@ -274,6 +277,7 @@ class UDPResponse(object):
         args = ",".join("%s=%r" % i for i in sorted(self.__dict__.items()))
         return "%s(%s)" % (self.__class__.__name__, args)
 
+
 class AsyncUDPClient(Configurable):
 
 
@@ -285,7 +289,9 @@ class AsyncUDPClient(Configurable):
 
     @classmethod
     def configurable_default(cls) -> Type[Configurable]:
+
         from simple_udpclient import SimpleAsyncUDPClient
+
         return SimpleAsyncUDPClient
 
     @classmethod
@@ -423,46 +429,45 @@ class UDPStreamClosedError(UDPClientError):
         return self.message or "Stream closed"
 
 
+def main() -> None:
+    from tornado.options import define, options, parse_command_line
+
+    define("print_headers", type=bool, default=False)
+    define("print_body", type=bool, default=True)
+    define("follow_redirects", type=bool, default=True)
+    define("validate_cert", type=bool, default=True)
+    define("proxy_host", type=str)
+    define("proxy_port", type=int)
+    args = parse_command_line()
+    client = UDPClient()
+    for arg in args:
+        try:
+            response = client.fetch(
+                arg,
+                follow_redirects=options.follow_redirects,
+                validate_cert=options.validate_cert,
+                proxy_host=options.proxy_host,
+                proxy_port=options.proxy_port,
+            )
+        except UDPClientError as e:
+            if e.response is not None:
+                response = e.response
+            else:
+                raise
+        if options.print_headers:
+            print(response.headers)
+        if options.print_body:
+            print(native_str(response.body))
+    client.close()
+
+
+if __name__ == "__main__":
+    main()
 
 #
-udp_client = UDPClient()
-try:
-    response = udp_client.fetch("udp://10.1.4.6:1111/controller?init")
-    print(response.body)
-except UDPClientError as e:
-    # HTTPError is raised for non-200 responses; the response
-    # can be found in e.response.
-    print("Error: " + str(e))
-except Exception as e:
-    # Other errors are possible, such as IOError.
-    print("Error: " + str(e))
-udp_client.close()
 
 
-# max_client = 1
-#
-# i = 0
-
-# clients = [AsyncUDPClient() for client in range(max_client)]
 
 
-# async def f():
-#     http_client = AsyncUDPClient()
-#     try:
-#         response = await http_client.fetch("udp://10.1.4.6:1111/controller?init")
-#         return response
-#     except Exception as e:
-#         print("Error: %s" % e)
-#     else:
-#         print(response.body)
-# a = f()
-
-
-# while i < max_client:
-#    response = clients[i].fetch("udp://10.1.4.6:1111/controller?init")
-#    print(response, 'response')
-#    i += 1
-# 
-# IOLoop.instance().start()
 
 
