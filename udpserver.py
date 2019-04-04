@@ -1,14 +1,16 @@
-#!/usr/bin/env python
-#coding=utf-8
-import socket
-import os
-import errno
-from stat import S_ISSOCK
+"""A non-blocking, single-threaded UDP server."""
 
-from tornado import process
+from __future__ import absolute_import, division, print_function, with_statement
+
+import errno
+import inspect
+import os
+import socket
 
 from tornado.ioloop import IOLoop
-from tornado.platform.auto import set_close_exec
+from tornado import process
+from tornado.netutil import set_close_exec
+
 
 class UDPServer(object):
     def __init__(self, io_loop=None):
@@ -26,9 +28,10 @@ class UDPServer(object):
             add_accept_handler(sock, self._on_recive,
                                io_loop=self.io_loop)
 
-    def bind(self, port, address=None, family=socket.AF_UNSPEC, backlog=25):
+    def bind(self, port=None, address=None, family=socket.AF_UNSPEC, backlog=25):
         sockets = bind_sockets(port, address=address, family=family,
                                backlog=backlog)
+
         if self._started:
             self.add_sockets(sockets)
         else:
@@ -50,6 +53,13 @@ class UDPServer(object):
 
     def _on_recive(self, data, address):
         print(data)
+        host = address[0]
+        port = address[1]
+        sock = socket.socket(
+            socket.AF_INET,
+            socket.SOCK_DGRAM)
+        sock.connect(address)
+
 
 def bind_sockets(port, address=None, family=socket.AF_UNSPEC, backlog=25):
     sockets = []
@@ -58,8 +68,13 @@ def bind_sockets(port, address=None, family=socket.AF_UNSPEC, backlog=25):
     flags = socket.AI_PASSIVE
     if hasattr(socket, "AI_ADDRCONFIG"):
         flags |= socket.AI_ADDRCONFIG
-    for res in set(socket.getaddrinfo(address, port, family, socket.SOCK_DGRAM,
-                                  0, flags)):
+
+    for res in set(socket.getaddrinfo(address,
+                                      port,
+                                      family,
+                                      socket.SOCK_DGRAM,
+                                      0, flags)):
+
         af, socktype, proto, canonname, sockaddr = res
         sock = socket.socket(af, socktype, proto)
         set_close_exec(sock.fileno())
@@ -73,44 +88,41 @@ def bind_sockets(port, address=None, family=socket.AF_UNSPEC, backlog=25):
         sockets.append(sock)
     return sockets
 
-if hasattr(socket, 'AF_UNIX'):
-    def bind_unix_socket(file, mode=600, backlog=128):
-        sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
-        set_close_exec(sock.fileno())
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        sock.setblocking(0)
-        try:
-            st = os.stat(file)
-        except OSError as err:
-            if err.errno != errno.ENOENT:
-                raise
-        else:
-            if S_ISSOCK(st.st_mode):
-                os.remove(file)
-            else:
-                raise ValueError("File %s exists and is not a socket", file)
-        sock.bind(file)
-        os.chmod(file, mode)
-        sock.listen(backlog)
-        return sock
 
 def add_accept_handler(sock, callback, io_loop=None):
     if io_loop is None:
         io_loop = IOLoop.instance()
-
-    def accept_handler(fd, events):
+    def handle_accept(fd, events):
+        print(fd, events)
         while True:
             try:
-                data, address = sock.recvfrom(2500)
+                data, address = sock.recvfrom(1024)
             except socket.error as e:
                 if e.args[0] in (errno.EWOULDBLOCK, errno.EAGAIN):
                     return
                 raise
             callback(data, address)
-    io_loop.add_handler(sock.fileno(), accept_handler, IOLoop.READ)
+    io_loop.add_handler(sock.fileno(), handle_accept, IOLoop.READ)
 
-if __name__ == '__main__':
-    serv = UDPServer()
-    serv.bind(1112)
-    serv.start()
-    IOLoop.instance().start()
+
+# 
+# if hasattr(socket, 'AF_UNIX'):
+#     def bind_unix_socket(file, mode=600, backlog=128):
+#         sock = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+#         set_close_exec(sock.fileno())
+#         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+#         sock.setblocking(0)
+#         try:
+#             st = os.stat(file)
+#         except OSError as err:
+#             if err.errno != errno.ENOENT:
+#                 raise
+#             else:
+#                 if st.S_ISSOCK(st.st_mode):
+#                     os.remove(file)
+#                 else:
+#                     raise ValueError("File %s exists and is not a socket", file)
+#         sock.bind(file)
+#         os.chmod(file, mode)
+#         sock.listen(backlog)
+#         return sock

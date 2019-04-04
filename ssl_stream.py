@@ -1,5 +1,4 @@
 import socket
-
 from tornado import gen
 from tornado.ioloop import IOLoop
 from tornado.iostream import IOStream
@@ -18,6 +17,8 @@ class UDPStream(IOStream):
         # broadcast will not be able to receive data.
         return self.socket.sendto(data, self._destination)
 
+
+
 class UDPClient:
     """
     A non-blocking UDP connection factory.
@@ -27,14 +28,17 @@ class UDPClient:
     def __init__(self, io_loop=None):
         self.io_loop = io_loop or IOLoop.current()
 
-    @gen.coroutine
+
     def connect(
-        self, host, port, ssl_options=None, max_buffer_size=None,
-        broadcast=False, reuse=True,
+            self, host, port,
+            ssl_options=None,
+            max_buffer_size=None,
+            broadcast=False, reuse=True,
     ):
+
         sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # TODO: make configurable
-        sock.bind(('', 0))
+
+        sock.bind((host, port))
 
         if broadcast:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
@@ -44,7 +48,6 @@ class UDPClient:
 
         stream = UDPStream(
             socket=sock,
-            io_loop=self.io_loop,
             max_buffer_size=max_buffer_size,
             destination=(host, port),
         )
@@ -57,3 +60,8 @@ class UDPClient:
             )
 
         return stream
+
+
+# client = UDPClient()
+# client.connect('127.0.0.1', 8888, max_buffer_size=1024).write_to_fd(b'11111')
+# client.io_loop.start()
